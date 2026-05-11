@@ -468,12 +468,15 @@ export default function Game({ session, onExit }) {
           selfMesh.rotation.y = lerpAngle(selfMesh.rotation.y, targetRot, 0.25);
         }
 
-        animateCharacter(selfMesh, dt, isMoving);
-        tickAttackSwing(selfMesh, dt);
-
         // Auto-attack target if in range. Range is class-flavored — mages cast
         // from afar; warriors close to melee distance. Read class from the mesh
         // userData (not the React `self` state, which the rAF closure cant see).
+        // We update the position in this block but defer the animateCharacter
+        // call until below, so the rig sees a single effective isMoving per
+        // frame. Calling animateCharacter twice with different isMoving values
+        // (once for WASD, once for auto-approach) used to make the AnimationMixer
+        // reset() its move/idle actions every frame and freeze on frame 0.
+        let approachingTarget = false;
         if (attackTarget && now - lastAttack > 700) {
           const t = attackTarget.kind === 'mob' ? mobs.get(attackTarget.id) : players.get(attackTarget.id);
           if (t && !t.dead) {
@@ -499,13 +502,16 @@ export default function Game({ session, onExit }) {
               const m = new THREE.Vector3(dx / len, 0, dz / len).multiplyScalar(speed * dt);
               selfMesh.position.add(m);
               selfMesh.rotation.y = lerpAngle(selfMesh.rotation.y, Math.atan2(m.x, m.z), 0.25);
-              animateCharacter(selfMesh, dt, true);
+              approachingTarget = true;
             }
           } else {
             attackTarget = null;
             setTarget(null);
           }
         }
+
+        animateCharacter(selfMesh, dt, isMoving || approachingTarget);
+        tickAttackSwing(selfMesh, dt);
 
         // Sync to server (10 Hz)
         if (now - lastSync > 100) {
