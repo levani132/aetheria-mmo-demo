@@ -35,6 +35,7 @@ export default async function handler(req, res) {
       character: {
         charClass: record.charClass,
         gender: record.gender,
+        race: record.race || 'human',
         level: record.level,
       },
     });

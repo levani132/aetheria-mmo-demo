@@ -7,6 +7,8 @@ import {
   playAttackSwing, tickAttackSwing, buildNameplate,
 } from '../lib/three/characters';
 import { FxManager } from '../lib/three/effects';
+import { loadElfMageFemale } from '../lib/three/glbAssets';
+import { ATTACK_RANGE_SQ } from '../lib/gamedata';
 import HUD from './HUD';
 import Inventory from './Inventory';
 import Shop from './Shop';
@@ -48,6 +50,11 @@ export default function Game({ session, onExit }) {
 
     // Build world
     const world = buildWorld(scene, { CITY_RADIUS: 35, FOREST_RADIUS: 140, GROUND_SIZE: 320 });
+
+    // Kick off elf-mage-female GLB load eagerly. The first elf player to spawn
+    // will get a brief procedural-placeholder before swap; subsequent elves are
+    // instant because the asset is cached.
+    loadElfMageFemale().catch(() => { /* glbAssets logs; silent here */ });
 
     // FX manager
     const fx = new FxManager(scene);
@@ -97,6 +104,7 @@ export default function Game({ session, onExit }) {
         const sm = buildCharacter({
           charClass: resp.self.charClass,
           gender: resp.self.gender,
+          race: resp.self.race,
           level: resp.self.level,
           equipment: resp.self.equipment,
           isSelf: true,
@@ -123,6 +131,9 @@ export default function Game({ session, onExit }) {
         // Build others & mobs
         for (const o of resp.others) addOtherPlayer(o);
         for (const m of resp.mobs)   addMob(m);
+        if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+          window.__aetheria = { scene, camera, fx, players, mobs, socket, get self() { return players.get(selfId); } };
+        }
       });
     });
 
@@ -140,8 +151,9 @@ export default function Game({ session, onExit }) {
       const oldMesh = rec.mesh;
       const charClass = oldMesh.userData.charClass;
       const gender = oldMesh.userData.gender;
+      const race = oldMesh.userData.race;
       const level = rec.level || 1;
-      const newMesh = buildCharacter({ charClass, gender, level, equipment, isSelf: id === selfId });
+      const newMesh = buildCharacter({ charClass, gender, race, level, equipment, isSelf: id === selfId });
       newMesh.position.copy(oldMesh.position);
       newMesh.rotation.copy(oldMesh.rotation);
       scene.remove(oldMesh);
@@ -263,7 +275,7 @@ export default function Game({ session, onExit }) {
 
     function addOtherPlayer(p) {
       const m = buildCharacter({
-        charClass: p.charClass, gender: p.gender, level: p.level,
+        charClass: p.charClass, gender: p.gender, race: p.race, level: p.level,
         equipment: p.equipment, isSelf: false,
       });
       m.position.set(p.pos.x, 0, p.pos.z);
@@ -459,19 +471,23 @@ export default function Game({ session, onExit }) {
         animateCharacter(selfMesh, dt, isMoving);
         tickAttackSwing(selfMesh, dt);
 
-        // Auto-attack target if in range
+        // Auto-attack target if in range. Range is class-flavored — mages cast
+        // from afar; warriors close to melee distance. Read class from the mesh
+        // userData (not the React `self` state, which the rAF closure cant see).
         if (attackTarget && now - lastAttack > 700) {
           const t = attackTarget.kind === 'mob' ? mobs.get(attackTarget.id) : players.get(attackTarget.id);
           if (t && !t.dead) {
             const dx = t.mesh.position.x - selfMesh.position.x;
             const dz = t.mesh.position.z - selfMesh.position.z;
             const d2 = dx * dx + dz * dz;
-            if (d2 < 9) {
+            const myClass = selfMesh.userData.charClass;
+            const rangeSq = ATTACK_RANGE_SQ[myClass] ?? 9;
+            if (d2 < rangeSq) {
               lastAttack = now;
               socket.emit('attack', { targetType: attackTarget.kind, targetId: attackTarget.id });
               // local swing feedback (server confirms via combat:hit)
               playAttackSwing(selfMesh);
-              if (self?.charClass === 'mage') {
+              if (myClass === 'mage') {
                 fx.spawnSpellProjectile(
                   selfMesh.position, t.mesh.position,
                   0x9a6aff,

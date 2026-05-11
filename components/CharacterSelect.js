@@ -7,6 +7,7 @@ export default function CharacterSelect({ onJoin }) {
   const [password, setPassword] = useState('');
   const [charClass, setCharClass] = useState('warrior');
   const [gender, setGender] = useState('male');
+  const [race, setRace] = useState('human');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -52,7 +53,7 @@ export default function CharacterSelect({ onJoin }) {
   const submitCreate = (e) => {
     e.preventDefault();
     setError('');
-    onJoin({ username, password, charClass, gender });
+    onJoin({ username, password, charClass, gender, race });
   };
 
   const back = () => {
@@ -155,6 +156,27 @@ export default function CharacterSelect({ onJoin }) {
                   </div>
                 </button>
               </div>
+            </div>
+
+            <div className="field">
+              <span className="field-label">Lineage</span>
+              <div className="gender-row">
+                <button
+                  type="button"
+                  className={`gender-pill ${race === 'human' ? 'selected' : ''}`}
+                  onClick={() => setRace('human')}
+                >Human</button>
+                <button
+                  type="button"
+                  className={`gender-pill ${race === 'elves' ? 'selected' : ''}`}
+                  onClick={() => setRace('elves')}
+                >Elves</button>
+              </div>
+              {race === 'elves' && charClass === 'mage' && gender === 'female' && (
+                <div className="login-hint" style={{ marginTop: 6 }}>
+                  ❦ The Icebound Enchantress — a rigged elven form.
+                </div>
+              )}
             </div>
 
             <div className="field">
